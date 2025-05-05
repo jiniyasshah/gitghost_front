@@ -24,35 +24,36 @@ export async function POST(request: Request) {
     try {
       const destRepoUrl = new URL(data.dest_repo);
       if (destRepoUrl.hostname === "github.com") {
-        const pathParts = destRepoUrl.pathname.split("/");
-        if (pathParts.length >= 3) {
-          const repoOwner = pathParts[1].toLowerCase();
+        const pathParts = destRepoUrl.pathname.split("/").filter(Boolean);
+        if (pathParts.length >= 2) {
+          const repoOwner = pathParts[0].toLowerCase();
 
-          // Get user's GitHub username from session or profile
+          // Always fetch GitHub profile to get reliable username
           let userGithubUsername = "";
 
-          // If we have the username directly in the session
-          if (session.user?.name) {
-            userGithubUsername = session.user.name.toLowerCase();
-          } else {
-            // Fetch the user's GitHub profile to get their username
-            try {
-              const response = await fetch("https://api.github.com/user", {
-                headers: {
-                  Authorization: `token ${session.accessToken}`,
-                },
-              });
+          try {
+            const response = await fetch("https://api.github.com/user", {
+              headers: {
+                Authorization: `token ${session.accessToken}`,
+              },
+            });
 
-              if (response.ok) {
-                const profile = await response.json();
-                userGithubUsername = profile.login.toLowerCase();
-              }
-            } catch (error) {
-              console.error("Error fetching GitHub profile:", error);
+            if (response.ok) {
+              const profile = await response.json();
+              userGithubUsername = profile.login.toLowerCase();
+            } else {
+              throw new Error(
+                `GitHub API responded with status ${response.status}`
+              );
             }
+          } catch (error) {
+            console.error("Error fetching GitHub profile:", error);
+            return NextResponse.json(
+              { message: "Could not verify GitHub account ownership" },
+              { status: 500 }
+            );
           }
 
-          // If we have the username and it doesn't match the repo owner
           if (userGithubUsername && repoOwner !== userGithubUsername) {
             return NextResponse.json(
               {
